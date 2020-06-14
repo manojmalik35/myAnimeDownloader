@@ -1,0 +1,18 @@
+{
+  "name": "myAnime",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.19.2",
+    "multi-progress": "^3.0.0",
+    "ora": "^4.0.4",
+    "puppeteer": "^3.3.0"
+  }
+}
