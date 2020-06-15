@@ -1,2 +1,3 @@
 clear
-node main "credentials.json"
+# node main "credentials.json"
+node main2 "credentials.json"
