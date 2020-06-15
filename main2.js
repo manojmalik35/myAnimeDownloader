@@ -78,6 +78,7 @@ async function start(anime, se, ee) {
             await tab.keyboard.up("Control");
 
             anime = compareString + " season" + anime.split("season")[1];    
+            fs.mkdirSync(`/home/manoj/Downloads/${anime}/`);
             await searchBox[1].type(anime, { delay: 50 });
             var ftime = Date.now() + 3000;
             while (Date.now() < ftime) { }
@@ -102,7 +103,7 @@ async function start(anime, se, ee) {
             }, episodeLinks[si]);
 
             var ntab = await browser.newPage();
-            var episodeWillBeDownloadedPromise = downloadEpisode(href, ntab);
+            var episodeWillBeDownloadedPromise = downloadEpisode(href, ntab, anime);
             episodeDownloadedArr.push(episodeWillBeDownloadedPromise);
             si++;
         }
@@ -166,7 +167,7 @@ async function handleAds(tab) {
     }
 }
 
-async function downloadEpisode(link, ntab) {
+async function downloadEpisode(link, ntab, anime) {
     try {
 
         await ntab.goto(link, { waitUntil: "networkidle0" });
@@ -199,7 +200,7 @@ async function downloadEpisode(link, ntab) {
             total: parseInt(totalLength)
         });
 
-        const writer = fs.createWriteStream(`/home/manoj/Downloads/${episodeNo}.mp4`);
+        const writer = fs.createWriteStream(`/home/manoj/Downloads/${anime}/${episodeNo}.mp4`);
 
         data.on('data', (chunk) => {
             if (progressBar.tick) {
@@ -214,7 +215,7 @@ async function downloadEpisode(link, ntab) {
             })
 
             writer.on('error', function (err) {
-                fs.unlink(`/home/manoj/Downloads/${episodeNo}.mp4`);
+                fs.unlink(`/home/manoj/Downloads/${anime}/${episodeNo}.mp4`);
                 reject(err);
             })
         })

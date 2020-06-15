@@ -30,4 +30,5 @@ Run the command :- node main "credentials.json"
 
 Make sure that run "npm install" before running it and make sure the "credentials.json" file is in the same directory.
 
+To stop the execution, press Ctrl + C.
 That's it. Thank you.
