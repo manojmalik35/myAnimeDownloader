@@ -246,13 +246,13 @@ async function downloadEpisode(tab, link, totalDownload, downloadPath) {
             else
                 agent = new https.Agent({ keepAlive: true });
 
+            if (j != totalDownload - 1) {
+                    await tab.waitForSelector("#btnNext");
+                    await navigationHelper(tab, "#btnNext");
+            }
             let episodeWillBeDownloadedPromise = realDownload(href, episodeNo, agent, downloadPath);
             episodeDownloadedArr.push(episodeWillBeDownloadedPromise);
 
-            if (j != totalDownload - 1) {
-                await tab.waitForSelector("#btnNext");
-                await navigationHelper(tab, "#btnNext");
-            }
         }
 
         await Promise.all(episodeDownloadedArr);
@@ -281,7 +281,7 @@ async function realDownload(url, episodeNo, agent, downloadPath) {
 
     const progressBar = multi.newBar(`-> downloading ${episodeNo} [:bar] :percent :etas`, {
         width: 40,
-        complete: "😂",
+        complete: "❱",
         incomplete: ' ',
         renderThrottle: 1,
         total: parseInt(totalLength)

@@ -146,7 +146,7 @@ async function downloadEpisode(link, ntab, downloadPath) {
 
         const progressBar = multi.newBar(`-> downloading ${episodeNo} [:bar] :percent :etas`, {
             width: 40,
-            complete: "😂",
+            complete: "❱",
             incomplete: ' ',
             renderThrottle: 1,
             total: parseInt(totalLength)
