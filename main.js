@@ -3,46 +3,22 @@ let fs = require("fs");
 var axios = require("axios");
 var ProgressBar = require("progress");
 var Multiprogress = require("multi-progress")(ProgressBar);
-var readline = require('readline');
-const ora = require('ora');
+const https = require("https");
+var path = require("path");
 
 const multi = new Multiprogress(process.stderr);
 
-let credentialsFile = process.argv[2];
-//cfhdojbkjhnklbpkdaibdccddilifddb - adblocker extension id
-
-var reader = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
-
-var spinner;
-
-var anime, se, ee;
-reader.question('Enter the name of anime : ', function (name) {
-    anime = name;
-    reader.question("From which episode you want to download : ", function (episode) {
-        se = episode;
-        reader.question("To which episode you want to download : ", function (end) {
-            ee = end;
-            reader.close();
-            spinner = ora().start();
-
-            spinner.color = 'red';
-            spinner.text = 'Loading website';
-            spinner.spinner = 'bouncingBall';
-            start(anime, se, ee);
-        })
-    })
-})
-
-async function start(anime, se, ee) {
+let browser;
+module.exports.start = async function () {
     try {
-        let browser = await puppeteer.launch({
-            product: "chrome",
+        let anime = arguments[0], se = arguments[1], ee = arguments[2], downloadPath = arguments[3], credentialsFile = arguments[4];
+
+        let data = await fs.promises.readFile(credentialsFile, "utf-8");
+        let credentials = JSON.parse(data);
+        browser = await puppeteer.launch({
             headless: false,
             defaultViewport: null,
-            executablePath: "/usr/bin/google-chrome-stable",
+            executablePath: credentials.executablePath,
             args: ["--start-maximized",
                 // "--disable-extensions-except='.config/google-chrome/Default/Extensions/cfhdojbkjhnklbpkdaibdccddilifddb/3.8.4_0/'",
                 // "--load-extension='.config/google-chrome/Default/Extensions/cfhdojbkjhnklbpkdaibdccddilifddb/'"
@@ -53,26 +29,48 @@ async function start(anime, se, ee) {
         let tabs = await browser.pages();
         let tab = tabs[0];
 
-        await loginHelper(tab, browser);
+
+        await loginHelper(tab, credentials);
 
         await tab.waitForSelector("#keyword");
         await tab.type("#keyword", anime, { delay: 50 });
         await tab.waitForSelector("#result_box a", { visible: true });
         let suggestions = await tab.$$("#result_box a");
-        await navigationHelper(tab, null, suggestions[0]);
+        if (suggestions.length > 3)
+            await navigationHelper(tab, null, suggestions[1]);
+        else
+            await navigationHelper(tab, null, suggestions[0]);
 
         await tab.waitForSelector("tbody a");
         let episodeLinks = await tab.$$("tbody a");
         let l = episodeLinks.length;
-        let ei = l - se;
         let episodesToDownload = ee - se + 1;
 
-        let href = await tab.evaluate(function (anchor) {
-            return anchor.getAttribute("href");
-        }, episodeLinks[ei]);
+        let href, compareString;
+        if (se < 10)
+            compareString = `Episode 00${se}`;
+        else if (se < 1000)
+            compareString = `Episode 0${se}`;
+        else
+            compareString = `Episode ${se}`;
+        for (let i = l - 1; i >= 0; i--) {
+            let text = await (await episodeLinks[i].getProperty('textContent')).jsonValue();
+
+            if (text.includes(compareString)) {
+                href = await tab.evaluate(function (anchor) {
+                    return anchor.getAttribute("href");
+                }, episodeLinks[i]);
+                break;
+            }
+        }
 
         let chref = "https://kissanime.ru" + href;
-        await downloadEpisode(tab, chref, episodesToDownload);
+
+        downloadPath = path.join(downloadPath, anime);
+        if (!fs.existsSync(downloadPath))
+            fs.mkdirSync(downloadPath);
+
+        await downloadEpisode(tab, chref, episodesToDownload, downloadPath);
 
     } catch (err) {
         console.log(err.message);
@@ -81,32 +79,38 @@ async function start(anime, se, ee) {
 }
 
 
-async function loginHelper(tab, browser) {
+async function loginHelper(tab, credentials) {
     try {
-        let data = await fs.promises.readFile(credentialsFile, "utf-8");
-        let credentials = JSON.parse(data);
         let username = credentials.username;
         let pwd = credentials.pwd;
-        let url = credentials.url;
+        let url = "https://kissanime.ru";
 
         await tab.goto(url, { waitUntil: "networkidle0" });
         await tab.waitForSelector("#topHolderBox a");
-        spinner.stop();
         let loginlinks = await tab.$$("#topHolderBox a");
 
         await Promise.all([
-            new Promise(resolve => tab.once('popup', resolve)),
-            navigationHelper(tab, null, loginlinks[0])
+            navigationHelper(tab, null, loginlinks[0]),
+            new Promise((resolve) => {
+                tab.once('popup', resolve);
+                setTimeout(resolve, 5000);
+            })
         ]);
-        await handleAds(browser);
+        await handleAds();
 
         await tab.waitForSelector("#username");
         // let ftime = Date.now() + 3000;
         // while (Date.now() < ftime) { }
         await tab.type("#username", username, { delay: 50 });
         await tab.type("#password", pwd, { delay: 50 });
-        await navigationHelper(tab, "#btnSubmit");
-
+        await Promise.all([
+            navigationHelper(tab, "#btnSubmit"),
+            new Promise((resolve) => {
+                tab.once('popup', resolve);
+                setTimeout(resolve, 5000);
+            })
+        ]);
+        await handleAds();
         console.log("User logged in");
 
 
@@ -118,12 +122,12 @@ async function loginHelper(tab, browser) {
 async function navigationHelper(tab, selector, element) {
     if (selector != null) {
         await Promise.all([tab.waitForNavigation({
-            waitUntil: "networkidle0"
+            waitUntil: "networkidle2"
         }),
         tab.click(selector)]);
     } else {
         await Promise.all([tab.waitForNavigation({
-            waitUntil: "networkidle0"
+            waitUntil: "networkidle2"
         }),
         element.click()]);
     }
@@ -145,7 +149,7 @@ async function navigationHelper(tab, selector, element) {
 //     });
 // }
 
-async function handleAds(browser) {
+async function handleAds() {
     try {
         console.log('New Tab Created');
         let pages = await browser.pages();
@@ -158,28 +162,91 @@ async function handleAds(browser) {
     }
 }
 
-async function downloadEpisode(tab, link, totalDownload) {
+async function handleAds2(tab) {
+    try {
+        await tab.waitForSelector(".divCloseBut a");
+        let ad = await tab.$(".divCloseBut a");
+        await ad.click();
+        await tab.waitForSelector(".divCloseBut a");
+        ad = await tab.$(".divCloseBut a");
+        await ad.click();
+    } catch (err) {
+        console.log(err.message);
+    }
+}
+
+async function handleAds3(tab) {
+    await tab.waitForSelector("iframe");
+    var ads = await tab.$$("iframe");
+
+    while (ads != null) {
+        for (var i = 0; i < ads.length; i++) {
+            await tab.evaluate(function (ad) {
+                ad.setAttribute('style', "display:none;");
+            }, ads[i]);
+        }
+        ads = await tab.$$("iframe");
+    }
+}
+
+async function downloadEpisode(tab, link, totalDownload, downloadPath) {
     try {
 
         await tab.goto(link, { waitUntil: "networkidle0" });
         let episodeDownloadedArr = [];
         for (let j = 0; j < totalDownload; j++) {
             await tab.waitForSelector("#navsubbar");
+            await handleAds2(tab);
 
             await scrollToBottom(tab);
             await tab.waitFor(3000);
 
-            await tab.waitForSelector("#divDownload a");
-            let dLink = await tab.$("#divDownload a");
-            let href = await tab.evaluate(function (anchor) {
-                return anchor.getAttribute("href");
-            }, dLink);
-
             let curl = tab.url();
             let episode = curl.split("/").pop();
             let episodeNo = episode.split("?")[0];
+
+            // await tab.waitForSelector("#divDownload a");
+            let dLink = await tab.$("#divDownload a");
+
+            let href;
+            if (dLink == null) {
+                let curl = tab.url();
+                let carr = curl.split("=");
+                carr.pop();
+                carr = carr.join("=");
+                carr += "=mp4upload";
+                await tab.goto(carr, { waitUntil: "networkidle0" });
+                await handleAds2(tab);
+                await tab.waitForSelector("iframe#my_video_1");
+                let frame = await tab.$("iframe#my_video_1");
+                let nurl = await tab.evaluate(function (iframe) {
+                    return iframe.getAttribute("src");
+                }, frame);
+
+
+                let ntab = await browser.newPage();
+                await ntab.goto(nurl, { waitUntil: "networkidle2" });
+                await ntab.waitForSelector("#download", { timeout: 40000 });
+                let ndlink = await ntab.$("#download");
+
+                href = await ntab.evaluate(function (anchor) {
+                    return anchor.getAttribute("href");
+                }, ndlink);
+                await ntab.close();
+            } else {
+                href = await tab.evaluate(function (anchor) {
+                    return anchor.getAttribute("href");
+                }, dLink);
+            }
+
             console.log("Starting download");
-            let episodeWillBeDownloadedPromise = realDownload(href, episodeNo);
+            let agent;
+            if (href.includes("mp4"))
+                agent = new https.Agent({ rejectUnauthorized: false });
+            else
+                agent = new https.Agent({ keepAlive: true });
+
+            let episodeWillBeDownloadedPromise = realDownload(href, episodeNo, agent, downloadPath);
             episodeDownloadedArr.push(episodeWillBeDownloadedPromise);
 
             if (j != totalDownload - 1) {
@@ -189,7 +256,10 @@ async function downloadEpisode(tab, link, totalDownload) {
         }
 
         await Promise.all(episodeDownloadedArr);
+        await browser.close();
         console.log("Episodes downloaded.");
+
+
 
     } catch (err) {
         console.log(err.message);
@@ -199,10 +269,11 @@ async function downloadEpisode(tab, link, totalDownload) {
 
 }
 
-async function realDownload(url, episodeNo) {
+async function realDownload(url, episodeNo, agent, downloadPath) {
     const { data, headers } = await axios({
         url,
         method: 'GET',
+        httpsAgent: agent,
         responseType: 'stream'
     });
 
@@ -216,7 +287,7 @@ async function realDownload(url, episodeNo) {
         total: parseInt(totalLength)
     });
 
-    const writer = fs.createWriteStream(`/home/manoj/Downloads/${episodeNo}.mp4`);
+    const writer = fs.createWriteStream(path.join(downloadPath, `${episodeNo}.mp4`));
 
     data.on('data', (chunk) => {
         if (progressBar.tick) {
@@ -231,7 +302,7 @@ async function realDownload(url, episodeNo) {
         })
 
         writer.on('error', function (err) {
-            fs.unlink(`/home/manoj/Downloads/${episodeNo}.mp4`);
+            fs.unlink(path.join(downloadPath, `${episodeNo}.mp4`));
             reject(err);
         })
     })

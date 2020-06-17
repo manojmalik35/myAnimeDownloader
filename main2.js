@@ -3,45 +3,21 @@ const fs = require("fs");
 const axios = require("axios");
 const ProgressBar = require("progress");
 const Multiprogress = require("multi-progress")(ProgressBar);
-const readline = require('readline');
-const ora = require('ora');
+var path = require("path");
 
 const multi = new Multiprogress(process.stderr);
 
-var credentialsFile = process.argv[2];
-//cfhdojbkjhnklbpkdaibdccddilifddb - adblocker extension id
-
-var reader = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
-
-var spinner;
-var anime, se, ee;
-reader.question('Enter the name of anime : ', function (name) {
-    anime = name;
-    reader.question("From which episode you want to download : ", function (episode) {
-        se = episode;
-        reader.question("To which episode you want to download : ", function (end) {
-            ee = end;
-            reader.close();
-            spinner = ora().start();
-
-            spinner.color = 'red';
-            spinner.text = 'Loading website';
-            spinner.spinner = 'bouncingBall';
-            start(anime, se, ee);
-        })
-    })
-})
-
-async function start(anime, se, ee) {
+let browser;
+module.exports.start = async function () {
     try {
-        var browser = await puppeteer.launch({
-            product: "chrome",
+        let anime = arguments[0], se = arguments[1], ee = arguments[2], downloadPath = arguments[3], credentialsFile = arguments[4];
+
+        let data = await fs.promises.readFile(credentialsFile, "utf-8");
+        let credentials = JSON.parse(data);
+        browser = await puppeteer.launch({
             headless: false,
             defaultViewport: null,
-            executablePath: "/usr/bin/google-chrome-stable",
+            executablePath: credentials.executablePath,
             args: ["--start-maximized"],
             slowMo: 100
         })
@@ -49,7 +25,7 @@ async function start(anime, se, ee) {
         var tabs = await browser.pages();
         var tab = tabs[0];
 
-        await loginHelper(tab, browser);
+        await loginHelper(tab, credentials);
 
         await handleAds(tab);
         await tab.waitForSelector(".orig");
@@ -57,35 +33,9 @@ async function start(anime, se, ee) {
         await searchBox[1].type(anime, { delay: 50 });
         await tab.waitForSelector(".item.fx-none", { visible: true });
         var suggestions = await tab.$$(".item.fx-none .info .name");
-        var engNamePresent = false;
-        let compareString = anime;
-        if(anime.includes("season"))
-            compareString = anime.split("season")[0];
-        
-        for (var i = 0; i < suggestions.length; i++) {
-            var sug = suggestions[i];
-            var text = await (await sug.getProperty('textContent')).jsonValue();
-            if (text.toLowerCase().includes(compareString.toLowerCase())) {
-                engNamePresent = true;
-                break;
-            }
-        }
 
-        if (engNamePresent === false) {
-            compareString = await findJapaneseName(compareString, browser);
-            await tab.keyboard.down("Control");
-            await tab.keyboard.press('a');
-            await tab.keyboard.up("Control");
+        //wikipedia code
 
-            anime = compareString + " season" + anime.split("season")[1];    
-            fs.mkdirSync(`/home/manoj/Downloads/${anime}/`);
-            await searchBox[1].type(anime, { delay: 50 });
-            var ftime = Date.now() + 3000;
-            while (Date.now() < ftime) { }
-            await tab.waitForSelector(".item.fx-none", { visible: true });
-            suggestions = await tab.$$(".item.fx-none .info .name");
-        }
-        
         await navigationHelper(tab, null, suggestions[0]);
         await handleAds(tab);
 
@@ -93,22 +43,27 @@ async function start(anime, se, ee) {
         var episodeLinks = await tab.$$(".episodes.range.active a");
         var episodesToDownload = ee - se + 1;
         var episodeDownloadedArr = [];
-        
+
         var si = se - 1;
         var ei = (si + episodesToDownload);
-        while(si < ei){
+        downloadPath = path.join(downloadPath, anime);
+        if (!fs.existsSync(downloadPath))
+            fs.mkdirSync(downloadPath);
+        while (si < ei) {
 
             var href = await tab.evaluate(function (link) {
                 return link.getAttribute("href");
             }, episodeLinks[si]);
 
             var ntab = await browser.newPage();
-            var episodeWillBeDownloadedPromise = downloadEpisode(href, ntab, anime);
+
+            var episodeWillBeDownloadedPromise = downloadEpisode(href, ntab, downloadPath);
             episodeDownloadedArr.push(episodeWillBeDownloadedPromise);
             si++;
         }
 
         await Promise.all(episodeDownloadedArr);
+        await browser.close();
         console.log("Episodes downloaded");
 
     } catch (err) {
@@ -118,16 +73,13 @@ async function start(anime, se, ee) {
 }
 
 
-async function loginHelper(tab, browser) {
+async function loginHelper(tab, credentials) {
     try {
-        var data = await fs.promises.readFile(credentialsFile, "utf-8");
-        var credentials = JSON.parse(data);
         var username = credentials.username;
         var pwd = credentials.pwd;
-        var url = credentials.url2;
+        var url = "https://4anime.to/";
 
         await tab.goto(url, { waitUntil: "networkidle0" });
-        spinner.stop();
         await tab.waitForSelector(".mobileMenuLinkInactive-2PACsn.mobileMenuLink-rELItL");
         await navigationHelper(tab, ".mobileMenuLinkInactive-2PACsn.mobileMenuLink-rELItL");
 
@@ -167,7 +119,7 @@ async function handleAds(tab) {
     }
 }
 
-async function downloadEpisode(link, ntab, anime) {
+async function downloadEpisode(link, ntab, downloadPath) {
     try {
 
         await ntab.goto(link, { waitUntil: "networkidle0" });
@@ -183,7 +135,7 @@ async function downloadEpisode(link, ntab, anime) {
         var episodeNo = await (await names[1].getProperty('textContent')).jsonValue();
         console.log("Starting download");
         await ntab.close();
-        
+
         const { data, headers } = await axios({
             url,
             method: 'GET',
@@ -200,7 +152,7 @@ async function downloadEpisode(link, ntab, anime) {
             total: parseInt(totalLength)
         });
 
-        const writer = fs.createWriteStream(`/home/manoj/Downloads/${anime}/${episodeNo}.mp4`);
+        const writer = fs.createWriteStream(path.join(downloadPath, `${episodeNo}.mp4`));
 
         data.on('data', (chunk) => {
             if (progressBar.tick) {
@@ -215,7 +167,7 @@ async function downloadEpisode(link, ntab, anime) {
             })
 
             writer.on('error', function (err) {
-                fs.unlink(`/home/manoj/Downloads/${anime}/${episodeNo}.mp4`);
+                fs.unlink(path.join(downloadPath, `${episodeNo}.mp4`));
                 reject(err);
             })
         })
@@ -226,14 +178,43 @@ async function downloadEpisode(link, ntab, anime) {
 
 }
 
-async function findJapaneseName(anime, browser) {
-    var ntab = await browser.newPage();
-    await ntab.goto("https://www.wikipedia.org/", { waitUntil: "networkidle0" });
-    await ntab.waitForSelector("#searchInput");
-    await ntab.type("#searchInput", anime);
-    await navigationHelper(ntab, ".pure-button.pure-button-primary-progressive");
-    var translation = await ntab.$("i[title='Hepburn transliteration']");
-    var ansPromise = (await translation.getProperty('textContent')).jsonValue();
-    ntab.close();
-    return ansPromise;
-}
+// async function findJapaneseName(anime, browser) {
+//     var ntab = await browser.newPage();
+//     await ntab.goto("https://www.wikipedia.org/", { waitUntil: "networkidle0" });
+//     await ntab.waitForSelector("#searchInput");
+//     await ntab.type("#searchInput", anime);
+//     await navigationHelper(ntab, ".pure-button.pure-button-primary-progressive");
+//     var translation = await ntab.$("i[title='Hepburn transliteration']");
+//     var ansPromise = (await translation.getProperty('textContent')).jsonValue();
+//     ntab.close();
+//     return ansPromise;
+// }
+
+// var engNamePresent = false;
+        // let compareString = anime;
+        // if(anime.includes("season"))
+        //     compareString = anime.split("season")[0];
+
+        // for (var i = 0; i < suggestions.length; i++) {
+        //     var sug = suggestions[i];
+        //     var text = await (await sug.getProperty('textContent')).jsonValue();
+        //     if (text.toLowerCase().includes(compareString.toLowerCase())) {
+        //         engNamePresent = true;
+        //         break;
+        //     }
+        // }
+
+        // if (engNamePresent === false) {
+        //     compareString = await findJapaneseName(compareString, browser);
+        //     await tab.keyboard.down("Control");
+        //     await tab.keyboard.press('a');
+        //     await tab.keyboard.up("Control");
+
+        //     anime = compareString + " season" + anime.split("season")[1];    
+        //     fs.mkdirSync(`/home/manoj/Downloads/${anime}/`);
+        //     await searchBox[1].type(anime, { delay: 50 });
+        //     var ftime = Date.now() + 3000;
+        //     while (Date.now() < ftime) { }
+        //     await tab.waitForSelector(".item.fx-none", { visible: true });
+        //     suggestions = await tab.$$(".item.fx-none .info .name");
+        // }

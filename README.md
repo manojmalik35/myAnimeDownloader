@@ -7,28 +7,41 @@ Create a file named "credentials.json" which will contain the following content 
 {
     "username" : "<username>",
     "pwd" : "<password>",
-    "url" : "https://kissanime.ru/",
-    "url2" : "https://4anime.to/"
+    "executablePath" : "<executablePathForChrome>"
 }
 
 Replace <username> and <password> with your username and password of the account that you will have to create on the kissanime website and 4anime website.
 
-The file main2 is for the second website. That website support is added due to some issues in the Kissanime website.
+If you want to run code in chromium then just leave "executablePath" property empty. For eg- 
+"executablePath" : ""
 
-If an anime has more than 1 season, you can just enter <name of the anime > season <season no.>
-Eg- attack on titan season 2
+If you want to run code in chrome then you have to enter the path for your chrome. For eg - 
 
-#For linux users 
-just run the command :- ./pep.sh
+In Linux - 
+"executablePath" : "/usr/bin/google-chrome-stable"
 
-            OR
+In Windows - 
+"executablePath" : "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
 
-node main "credentials.json"
+It can be different for your system so please don't copy this path.
 
-#For Windows users
-Run the command :- node main "credentials.json"
+#How to run the code
 
-Make sure that run "npm install" before running it and make sure the "credentials.json" file is in the same directory.
+Make sure that run "npm install" before running it and make sure the "credentials.json" file is in the same directory as rest of the script files.
+
+Below are the commands you have to run :-
+
+For Linux - 
+chmod +x pep.sh (You have to run this command if you are running code for first time.)
+./pep.sh (Code will run with this command).
+
+For Windows - 
+pep.bat
+
+When entering download path, enter absolute path instead of relative path.
+When entering website choice, I will prefer 4anime because it contains less issues like ads etc. and it downloads episodes in 1080p by default. Always keep kissanime as second choice.
+I added kissanime support because 4anime does not contains recently released animes.
+While downloading from kissanime you have to answer the captcha and sometimes it opens new windows which have to be closed manually and it ruins the fun of automation. So prefer 4anime.
 
 To stop the execution, press Ctrl + C.
 That's it. Thank you.
