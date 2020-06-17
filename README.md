@@ -5,12 +5,12 @@ It is a web automation script which takes as input anime name and the range of e
 Create a file named "credentials.json" which will contain the following content : 
 
 {
-    "username" : "<username>",
-    "pwd" : "<password>",
-    "executablePath" : "<executablePathForChrome>"
+    "username" : "username",
+    "pwd" : "password",
+    "executablePath" : "executablePathForChrome"
 }
 
-Replace <username> and <password> with your username and password of the account that you will have to create on the kissanime website and 4anime website.
+Replace username and password with your username and password of the account that you will have to create on the kissanime website and 4anime website.
 
 If you want to run code in chromium then just leave "executablePath" property empty. For eg- 
 "executablePath" : ""
