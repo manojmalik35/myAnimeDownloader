@@ -10,7 +10,7 @@ const multi = new Multiprogress(process.stderr);
 let browser;
 module.exports.start = async function () {
     try {
-        let anime = arguments[0], se = arguments[1], ee = arguments[2], downloadPath = arguments[3], credentialsFile = arguments[4];
+        let anime = arguments[0], se = arguments[1], ee = arguments[2], downloadPath = arguments[3], credentialsFile = arguments[4], mode = arguments[5];
 
         let data = await fs.promises.readFile(credentialsFile, "utf-8");
         let credentials = JSON.parse(data);
@@ -42,29 +42,19 @@ module.exports.start = async function () {
         await tab.waitForSelector(".episodes.range.active a");
         var episodeLinks = await tab.$$(".episodes.range.active a");
         var episodesToDownload = ee - se + 1;
-        var episodeDownloadedArr = [];
 
         var si = se - 1;
         var ei = (si + episodesToDownload);
         downloadPath = path.join(downloadPath, anime);
         if (!fs.existsSync(downloadPath))
             fs.mkdirSync(downloadPath);
-        while (si < ei) {
 
-            var href = await tab.evaluate(function (link) {
-                return link.getAttribute("href");
-            }, episodeLinks[si]);
+        if (mode == "serial")
+            await downloadEpisodeSerial(tab, si, ei, downloadPath, episodeLinks);
+        else
+            await downloadEpisodeParallel(tab, si, ei, downloadPath, episodeLinks);
 
-            var ntab = await browser.newPage();
-
-            var episodeWillBeDownloadedPromise = downloadEpisode(href, ntab, downloadPath);
-            episodeDownloadedArr.push(episodeWillBeDownloadedPromise);
-            si++;
-        }
-
-        await Promise.all(episodeDownloadedArr);
         await browser.close();
-        console.log("Episodes downloaded");
 
     } catch (err) {
         console.log(err.message);
@@ -119,23 +109,90 @@ async function handleAds(tab) {
     }
 }
 
-async function downloadEpisode(link, ntab, downloadPath) {
+async function downloadEpisodeSerial(tab, si, ei, downloadPath, episodeLinks) {
     try {
 
-        await ntab.goto(link, { waitUntil: "networkidle0" });
+        let linkArr = [];
+        let first = si;
+        let firstPromise = undefined;
+        while (si < ei) {
 
-        await ntab.waitForSelector(".mirror_dl");
-        var dLink = await ntab.$(".mirror_dl");
-        var url = await ntab.evaluate(function (anchor) {
-            return anchor.getAttribute("href");
-        }, dLink);
+            var link = await tab.evaluate(function (link) {
+                return link.getAttribute("href");
+            }, episodeLinks[si]);
+
+            var ntab = await browser.newPage();
+            await ntab.goto(link, { waitUntil: "networkidle0" });
+
+            await ntab.waitForSelector(".mirror_dl");
+            var dLink = await ntab.$(".mirror_dl");
+            var url = await ntab.evaluate(function (anchor) {
+                return anchor.getAttribute("href");
+            }, dLink);
+
+            var names = await ntab.$$("#titleleft");
+            var episodeNo = await (await names[1].getProperty('textContent')).jsonValue();
+            if (si == first)
+                firstPromise = realDownload(url, episodeNo, downloadPath);
+            else
+                linkArr.push({ episodeNo, url });
+            si++;
+            await ntab.close();
+        }
+
+        firstPromise.then(async function () {
+            for (let i = 0; i < linkArr.length; i++) {
+                await realDownload(linkArr[i].url, linkArr[i].episodeNo, downloadPath);
+            }
+            console.log("Episodes Downloaded");
+        })
 
 
-        var names = await ntab.$$("#titleleft");
-        var episodeNo = await (await names[1].getProperty('textContent')).jsonValue();
-        console.log("Starting download");
-        await ntab.close();
+    } catch (err) {
+        console.log(err.message);
+    }
 
+}
+
+async function downloadEpisodeParallel(tab, si, ei, downloadPath, episodeLinks) {
+    try {
+
+        let episodeDownloadedArr = [];
+        while (si < ei) {
+            var link = await tab.evaluate(function (link) {
+                return link.getAttribute("href");
+            }, episodeLinks[si]);
+
+            var ntab = await browser.newPage();
+            await ntab.goto(link, { waitUntil: "networkidle0" });
+
+            await ntab.waitForSelector(".mirror_dl");
+            var dLink = await ntab.$(".mirror_dl");
+            var url = await ntab.evaluate(function (anchor) {
+                return anchor.getAttribute("href");
+            }, dLink);
+
+            var names = await ntab.$$("#titleleft");
+            var episodeNo = await (await names[1].getProperty('textContent')).jsonValue();
+            let episodeWillBeDownloadedPromise = realDownload(url, episodeNo, downloadPath);
+            episodeDownloadedArr.push(episodeWillBeDownloadedPromise);
+            await ntab.close();
+            si++;
+        }
+
+        let finalPromise = Promise.all(episodeDownloadedArr);
+        finalPromise.then(()=>{
+            console.log("Episodes Downloaded");
+        });
+
+    } catch (err) {
+        console.log(err.message);
+    }
+
+}
+
+async function realDownload(url, episodeNo, downloadPath) {
+    try {
         const { data, headers } = await axios({
             url,
             method: 'GET',
@@ -171,12 +228,11 @@ async function downloadEpisode(link, ntab, downloadPath) {
                 reject(err);
             })
         })
-
     } catch (err) {
         console.log(err.message);
     }
-
 }
+
 
 // async function findJapaneseName(anime, browser) {
 //     var ntab = await browser.newPage();

@@ -21,9 +21,10 @@ In Linux -
 "executablePath" : "/usr/bin/google-chrome-stable"
 
 In Windows - 
-"executablePath" : "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+"executablePath" : "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
 
 It can be different for your system so please don't copy this path.
+Don't forget to use double backslash instead of single because it is a json file.
 
 #How to run the code
 
@@ -32,7 +33,7 @@ Make sure that run "npm install" before running it and make sure the "credential
 Below are the commands you have to run :-
 
 For Linux - 
-chmod +x pep.sh (You have to run this command if you are running code for first time.)
+chmod +x pep.sh (You have to run this command only if you are running code for first time.)
 ./pep.sh (Code will run with this command).
 
 For Windows - 

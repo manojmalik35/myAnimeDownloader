@@ -11,7 +11,7 @@ const multi = new Multiprogress(process.stderr);
 let browser;
 module.exports.start = async function () {
     try {
-        let anime = arguments[0], se = arguments[1], ee = arguments[2], downloadPath = arguments[3], credentialsFile = arguments[4];
+        let anime = arguments[0], se = arguments[1], ee = arguments[2], downloadPath = arguments[3], credentialsFile = arguments[4], mode = arguments[5];
 
         let data = await fs.promises.readFile(credentialsFile, "utf-8");
         let credentials = JSON.parse(data);
@@ -70,7 +70,12 @@ module.exports.start = async function () {
         if (!fs.existsSync(downloadPath))
             fs.mkdirSync(downloadPath);
 
-        await downloadEpisode(tab, chref, episodesToDownload, downloadPath);
+        if (mode == "serial")
+            await downloadEpisodeSerial(tab, chref, episodesToDownload, downloadPath);
+        else
+            await downloadEpisodeParallel(tab, chref, episodesToDownload, downloadPath);
+
+        await browser.close();
 
     } catch (err) {
         console.log(err.message);
@@ -189,7 +194,95 @@ async function handleAds3(tab) {
     }
 }
 
-async function downloadEpisode(tab, link, totalDownload, downloadPath) {
+async function hrefFinder(tab) {
+    let dLink = await tab.$("#divDownload a");
+
+    let href;
+    if (dLink == null) {
+        let curl = tab.url();
+        let carr = curl.split("=");
+        carr.pop();
+        carr = carr.join("=");
+        carr += "=mp4upload";
+        await tab.goto(carr, { waitUntil: "networkidle0" });
+        await handleAds2(tab);
+        await tab.waitForSelector("iframe#my_video_1");
+        let frame = await tab.$("iframe#my_video_1");
+        let nurl = await tab.evaluate(function (iframe) {
+            return iframe.getAttribute("src");
+        }, frame);
+
+
+        let ntab = await browser.newPage();
+        await ntab.goto(nurl, { waitUntil: "networkidle2" });
+        await ntab.waitForSelector("#download", { timeout: 40000 });
+        let ndlink = await ntab.$("#download");
+
+        href = await ntab.evaluate(function (anchor) {
+            return anchor.getAttribute("href");
+        }, ndlink);
+        await ntab.close();
+    } else {
+        href = await tab.evaluate(function (anchor) {
+            return anchor.getAttribute("href");
+        }, dLink);
+    }
+
+    return href;
+}
+
+async function downloadEpisodeSerial(tab, link, totalDownload, downloadPath) {
+    try {
+
+        await tab.goto(link, { waitUntil: "networkidle0" });
+        let linkArr = [];
+        let firstPromise = undefined;
+        for (let j = 0; j < totalDownload; j++) {
+            await tab.waitForSelector("#navsubbar");
+            await handleAds2(tab);
+
+            await scrollToBottom(tab);
+            await tab.waitFor(3000);
+
+            let curl = tab.url();
+            let episode = curl.split("/").pop();
+            let episodeNo = episode.split("?")[0];
+
+            // await tab.waitForSelector("#divDownload a");
+            let href = await hrefFinder(tab);
+            let agent;
+            if (href.includes("mp4"))
+                agent = new https.Agent({ rejectUnauthorized: false });
+            else
+                agent = new https.Agent({ keepAlive: true });
+
+            if (j != totalDownload - 1) {
+                await tab.waitForSelector("#btnNext");
+                await navigationHelper(tab, "#btnNext");
+            }
+
+            if (j == 0) {
+                console.log("Starting download");
+                firstPromise = realDownload(href, episodeNo, agent, downloadPath);
+            }
+            else
+                linkArr.push({ href, episodeNo, agent });
+
+        }
+
+        firstPromise.then(async function () {
+            for (let i = 0; i < linkArr.length; i++) {
+                await realDownload(linkArr[i].href, linkArr[i].episodeNo, linkArr[i].agent, downloadPath);
+            }
+            console.log("Episodes Downloaded");
+        })
+
+    } catch (err) {
+        console.log(err.message);
+    }
+}
+
+async function downloadEpisodeParallel(tab, link, totalDownload, downloadPath) {
     try {
 
         await tab.goto(link, { waitUntil: "networkidle0" });
@@ -206,40 +299,9 @@ async function downloadEpisode(tab, link, totalDownload, downloadPath) {
             let episodeNo = episode.split("?")[0];
 
             // await tab.waitForSelector("#divDownload a");
-            let dLink = await tab.$("#divDownload a");
-
-            let href;
-            if (dLink == null) {
-                let curl = tab.url();
-                let carr = curl.split("=");
-                carr.pop();
-                carr = carr.join("=");
-                carr += "=mp4upload";
-                await tab.goto(carr, { waitUntil: "networkidle0" });
-                await handleAds2(tab);
-                await tab.waitForSelector("iframe#my_video_1");
-                let frame = await tab.$("iframe#my_video_1");
-                let nurl = await tab.evaluate(function (iframe) {
-                    return iframe.getAttribute("src");
-                }, frame);
-
-
-                let ntab = await browser.newPage();
-                await ntab.goto(nurl, { waitUntil: "networkidle2" });
-                await ntab.waitForSelector("#download", { timeout: 40000 });
-                let ndlink = await ntab.$("#download");
-
-                href = await ntab.evaluate(function (anchor) {
-                    return anchor.getAttribute("href");
-                }, ndlink);
-                await ntab.close();
-            } else {
-                href = await tab.evaluate(function (anchor) {
-                    return anchor.getAttribute("href");
-                }, dLink);
-            }
-
-            console.log("Starting download");
+            let href = await hrefFinder(tab);
+            if(j == 0)
+                console.log("Starting download");
             let agent;
             if (href.includes("mp4"))
                 agent = new https.Agent({ rejectUnauthorized: false });
@@ -247,19 +309,19 @@ async function downloadEpisode(tab, link, totalDownload, downloadPath) {
                 agent = new https.Agent({ keepAlive: true });
 
             if (j != totalDownload - 1) {
-                    await tab.waitForSelector("#btnNext");
-                    await navigationHelper(tab, "#btnNext");
+                await tab.waitForSelector("#btnNext");
+                await navigationHelper(tab, "#btnNext");
             }
+
             let episodeWillBeDownloadedPromise = realDownload(href, episodeNo, agent, downloadPath);
             episodeDownloadedArr.push(episodeWillBeDownloadedPromise);
 
         }
 
-        await Promise.all(episodeDownloadedArr);
-        await browser.close();
-        console.log("Episodes downloaded.");
-
-
+        let finalPromise = Promise.all(episodeDownloadedArr);
+        finalPromise.then(() => {
+            console.log("Episodes downloaded.");
+        });
 
     } catch (err) {
         console.log(err.message);

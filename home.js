@@ -11,7 +11,7 @@ var reader = readline.createInterface({
 
 var spinner;
 
-let anime, se, ee, downloadPath;
+let anime, se, ee, downloadPath, mode;
 // "/home/manoj/Downloads"
 let credentialsFile = process.argv[2];
 reader.on("close", function () {
@@ -29,21 +29,23 @@ reader.question('Enter the name of anime : ', function (name) {
             ee = end;
             reader.question("Enter the path where you want to download : ", function (path) {
                 downloadPath = path;
-                reader.question("Enter k for kissanime && 4 for 4anime : ", async function (website) {
-                    spinner = ora().start();
-                    spinner.color = 'red';
-                    spinner.text = 'Loading website';
-                    spinner.spinner = 'bouncingBall';
-                    setTimeout(function () {
-                        spinner.stop();
-                    }, 5000);
+                reader.question("Enter s for serial download OR p for parallel download : ", function (method) {
+                    mode = method == "s" ? "serial" : "parallel";
+                    reader.question("Enter k for kissanime && 4 for 4anime : ", async function (website) {
+                        spinner = ora().start();
+                        spinner.color = 'red';
+                        spinner.text = 'Loading website';
+                        spinner.spinner = 'bouncingBall';
+                        setTimeout(function () {
+                            spinner.stop();
+                        }, 5000);
 
-                    if (website == "k")
-                        await kissanime.start(anime, se, ee, downloadPath, credentialsFile);
-                    else
-                        await anime4.start(anime, se, ee, downloadPath, credentialsFile);
+                        if (website == "k")
+                            await kissanime.start(anime, se, ee, downloadPath, credentialsFile, mode);
+                        else
+                            await anime4.start(anime, se, ee, downloadPath, credentialsFile, mode);
+                    })
                 })
-
             })
         })
     })
