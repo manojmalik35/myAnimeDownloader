@@ -13,7 +13,7 @@ var spinner;
 
 let anime, se, ee, downloadPath, mode;
 // "/home/manoj/Downloads"
-let credentialsFile = process.argv[2];
+let credentialsFile = "credentials.json";
 reader.on("close", function () {
     console.log();
     console.log("Thank you for using anime cli.");

@@ -29,15 +29,7 @@ Don't forget to use double backslash instead of single because it is a json file
 #How to run the code
 
 Make sure that run "npm install" before running it and make sure the "credentials.json" file is in the same directory as rest of the script files.
-
-Below are the commands you have to run :-
-
-For Linux - 
-chmod +x pep.sh (You have to run this command only if you are running code for first time.)
-./pep.sh (Code will run with this command).
-
-For Windows - 
-pep.bat
+After that, just run "npm start" and the app will start.
 
 When entering download path, enter absolute path instead of relative path.
 When entering website choice, I will prefer 4anime because it contains less issues like ads etc. and it downloads episodes in 1080p by default. Always keep kissanime as second choice.

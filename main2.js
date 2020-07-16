@@ -25,8 +25,9 @@ module.exports.start = async function () {
         var tabs = await browser.pages();
         var tab = tabs[0];
 
-        await loginHelper(tab, credentials);
+        await tab.setDefaultNavigationTimeout(50000);
 
+        await loginHelper(tab, credentials);
         await handleAds(tab);
         await tab.waitForSelector(".orig");
         var searchBox = await tab.$$(".orig");
