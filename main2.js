@@ -42,9 +42,24 @@ module.exports.start = async function () {
 
         await tab.waitForSelector(".episodes.range.active a");
         var episodeLinks = await tab.$$(".episodes.range.active a");
+        let l = episodeLinks.length;
         var episodesToDownload = ee - se + 1;
 
-        var si = se - 1;
+        let compareString;
+        var si;
+        if (se < 10)
+            compareString = `0${se}`;
+        else
+            compareString = `${se}`;
+        for (let i = 0; i < l; i++) {
+            let text = await (await episodeLinks[i].getProperty('textContent')).jsonValue();
+            if (text.includes(compareString)) {
+                si = i;
+                break;
+            }
+        }
+
+        
         var ei = (si + episodesToDownload);
         downloadPath = path.join(downloadPath, anime);
         if (!fs.existsSync(downloadPath))
